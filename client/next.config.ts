@@ -7,7 +7,7 @@ if (process.env.NODE_ENV === "production" && !process.env.API_ORIGIN) {
 const nextConfig: NextConfig = {
   cacheComponents: true,
   async rewrites() {
-    const origin = process.env.API_ORIGIN;
+    const origin = process.env.API_ORIGIN?.replace(/\/+$/, "");
     if (!origin) return [];
     return [{ source: "/api/:path*", destination: `${origin}/api/:path*` }];
   },
