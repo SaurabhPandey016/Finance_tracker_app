@@ -3,12 +3,26 @@ import { ZodError } from "zod";
 import { AppError } from "../utils/AppError.js";
 import { env } from "../config/env.js";
 import { logger } from "../utils/logger.js";
+import { isDatabaseUnavailableError } from "../utils/dbErrors.js";
+import { reportFirstConnectionFailure } from "../config/prisma.js";
 
 export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
   void next;
   let statusCode = 500;
   let message = "Internal server error";
   let errors: unknown;
+
+  if (isDatabaseUnavailableError(error)) {
+    reportFirstConnectionFailure(error);
+    logger.warn("Database unavailable", error instanceof Error ? error.name : undefined);
+    res.setHeader("Retry-After", "30");
+    res.status(503).json({
+      success: false,
+      code: "DB_UNAVAILABLE",
+      message: "The database is currently paused or unreachable. Please try again shortly or contact the developer for a live demo.",
+    });
+    return;
+  }
 
   if (error instanceof AppError) {
     statusCode = error.statusCode;

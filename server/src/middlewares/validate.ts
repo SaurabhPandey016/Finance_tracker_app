@@ -7,6 +7,8 @@ export const validate = (schema: AnyZodObject) => (req: Request, res: Response, 
     res.status(400).json({ success: false, message: "Validation failed", errors: result.error.flatten() });
     return;
   }
-  req.body = result.data.body ?? req.body;
+  if (result.data.body !== undefined) req.body = result.data.body;
+  if (result.data.query !== undefined) Object.assign(req.query, result.data.query);
+  if (result.data.params !== undefined) Object.assign(req.params, result.data.params);
   next();
 };
