@@ -1,0 +1,39 @@
+"use client";
+
+import { CheckCircle2, Database, Play, RotateCcw, Server, ServerCrash, Wifi } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Reveal } from "./Reveal";
+import { useBackendStatus } from "@/providers/BackendStatusProvider";
+import { useDemoLogin } from "@/hooks/useDemoLogin";
+import { siteConfig } from "@/lib/site-config";
+
+export function DemoAvailability() {
+  const { state, lastChecked, retryNow, secondsWaiting } = useBackendStatus();
+  const { runDemo, loading } = useDemoLogin();
+  const online = state === "online";
+  const paused = state === "db-paused";
+  const unreachable = state === "offline";
+  const waking = state === "checking" || state === "waking";
+
+  const apiStatus = online ? "Online" : waking ? "Waking up (about 1 min)" : unreachable ? "Unreachable" : "Online";
+  const apiColor = online || (!paused && !unreachable && !waking) ? "bg-primary" : waking ? "animate-pulse bg-[#d6a73d]" : "bg-terracotta";
+  const databaseStatus = online ? "Online" : paused ? "Paused" : waking ? "Checking" : "Paused";
+  const databaseColor = online ? "bg-primary" : paused || unreachable ? "bg-terracotta" : "animate-pulse bg-[#d6a73d]";
+  const timelineActive = online ? 3 : paused ? 3 : state === "checking" ? 0 : waking ? secondsWaiting < 20 ? 1 : 2 : 0;
+
+  return <section id="demo-availability" className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+    <Reveal className="text-center"><p className="text-sm font-semibold text-primary">Transparent by design</p><h2 className="mt-2 font-heading text-3xl font-bold sm:text-5xl">About the live demo</h2><p className="mx-auto mt-4 max-w-3xl leading-7 text-muted-foreground">FinTrack is a portfolio project hosted on free-tier infrastructure. To keep it available at zero cost, parts of the stack go to sleep when idle, so the first visit can take a moment.</p></Reveal>
+    <div className="mt-12 grid gap-5 lg:grid-cols-[1fr_.9fr]">
+      <Reveal><Card className={`glass border-t border-t-primary/30 rounded-2xl ${online ? "glow-olive" : ""}`}><CardContent className="p-5 sm:p-6"><h3 className="font-heading text-xl font-bold">Live system status</h3><div className="mt-5 space-y-3"><div className="flex items-center justify-between rounded-xl border border-border/70 bg-background/40 px-4 py-3"><span className="flex items-center gap-3 text-sm"><Server size={18} className="text-primary"/>API server (Render)</span><span className="flex items-center gap-2 text-sm font-semibold"><span className={`size-2 rounded-full ${apiColor}`}/>{apiStatus}</span></div><div className="flex items-center justify-between rounded-xl border border-border/70 bg-background/40 px-4 py-3"><span className="flex items-center gap-3 text-sm"><Database size={18} className="text-primary"/>Database (Supabase)</span><span className="flex items-center gap-2 text-sm font-semibold"><span className={`size-2 rounded-full ${databaseColor}`}/>{databaseStatus}</span></div></div>
+        {online && <div className="mt-4 flex items-center gap-2 rounded-xl bg-primary/15 px-4 py-3 text-sm font-semibold text-primary"><CheckCircle2 size={18}/>All systems ready</div>}
+        <div className="mt-5 flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground" aria-live="polite">{lastChecked ? `Last checked ${lastChecked.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Checking status..."}</p><Button type="button" variant="outline" size="sm" onClick={retryNow}><RotateCcw size={14} className="mr-2"/>Check again</Button></div>
+        <ol className="mt-5 grid grid-cols-3 gap-2" aria-label="Demo startup progress">{["Request","Wake server","Connect database"].map((step,index)=><li key={step} className="flex items-center gap-2 text-xs"><span className={`grid size-6 shrink-0 place-items-center rounded-full border text-[10px] ${index < timelineActive ? "border-primary bg-primary text-primary-foreground" : index === timelineActive && waking ? "border-[#d6a73d] text-[#d6a73d]" : "text-muted-foreground"}`}>{index+1}</span><span className="leading-4">{step}</span></li>)}</ol>
+      </CardContent></Card></Reveal>
+      <Reveal delay={0.08}><Card className="glass h-full rounded-2xl"><CardContent className="p-5 sm:p-6"><h3 className="font-heading text-xl font-bold">Why this happens</h3><div className="mt-5 space-y-4"><div className="rounded-xl border border-border/70 bg-background/40 p-4"><div className="flex gap-3"><Wifi className="mt-0.5 size-5 shrink-0 text-primary"/><div><h4 className="font-semibold">Server sleeps when idle</h4><p className="mt-1 text-sm leading-6 text-muted-foreground">Render&apos;s free plan sleeps the server after 15 minutes without traffic. Starting it again takes about a minute.</p></div></div></div><div className="rounded-xl border border-border/70 bg-background/40 p-4"><div className="flex gap-3"><ServerCrash className="mt-0.5 size-5 shrink-0 text-primary"/><div><h4 className="font-semibold">Database may be paused</h4><p className="mt-1 text-sm leading-6 text-muted-foreground">Free database projects are limited, and inactive ones are paused. I maintain many projects, so I resume each one manually on request.</p></div></div></div></div></CardContent></Card></Reveal>
+    </div>
+    <div className="mt-5 grid gap-5 md:grid-cols-3"><Reveal delay={0.02}><Card className="glass h-full rounded-2xl"><CardContent className="flex h-full flex-col p-5"><h3 className="font-heading text-lg font-bold">Try it now</h3><p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">Open the demo account and explore every insight.</p><Button className="gradient-olive mt-5 text-white" onClick={runDemo} disabled={loading}>{loading ? "Opening demo..." : "Try the demo"}</Button></CardContent></Card></Reveal><Reveal delay={0.06}><Card className="glass h-full rounded-2xl"><CardContent className="flex h-full flex-col p-5"><h3 className="font-heading text-lg font-bold">Request a live demo</h3><p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">I&apos;ll start everything and walk you through it.</p><Button className="gradient-olive mt-5 text-white" asChild><a href={siteConfig.demoRequestMailto}>Request a live demo</a></Button><a className="mt-3 inline-flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-primary" href={siteConfig.developer.linkedin} target="_blank" rel="noreferrer"><span className="text-xs font-bold">in</span>LinkedIn</a></CardContent></Card></Reveal><Reveal delay={0.10}><Card className="glass h-full rounded-2xl"><CardContent className="flex h-full flex-col p-5"><div className="flex items-center justify-between"><h3 className="font-heading text-lg font-bold">Video walkthrough</h3>{!siteConfig.demoVideoUrl && <Badge variant="secondary">Coming soon</Badge>}</div>{siteConfig.demoVideoUrl ? <><p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">Watch a guided tour of the product.</p><Button variant="outline" className="mt-5" asChild><a href={siteConfig.demoVideoUrl} target="_blank" rel="noreferrer"><Play size={16} className="mr-2"/>Watch video demo</a></Button></> : <><p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">Video demo will be published on LinkedIn soon.</p><Button variant="outline" className="mt-5" disabled><Play size={16} className="mr-2"/>Watch video demo</Button></>}</CardContent></Card></Reveal></div>
+    <p className="mt-8 text-center text-sm text-muted-foreground">Source code, architecture and screenshots are available in the <a className="font-semibold text-primary hover:underline" href={siteConfig.developer.github} target="_blank" rel="noreferrer"><span className="mr-1 text-xs font-bold">GH</span>GitHub repository</a>.</p>
+  </section>;
+}
