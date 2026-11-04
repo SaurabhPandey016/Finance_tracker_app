@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 import { Menu, Moon, Sun, Wallet, LogOut, User, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -24,7 +25,16 @@ export function Navbar() {
   const setUser = useAuthStore((state) => state.setUser);
 
   useEffect(() => { const onScroll = () => setScrolled(window.scrollY > 12); onScroll(); window.addEventListener("scroll", onScroll); return () => window.removeEventListener("scroll", onScroll); }, []);
-  const logout = async () => { await api.post("/auth/logout"); setUser(null); router.replace("/"); };
+  const logout = async () => {
+    try {
+      await api.post("/auth/logout");
+      setUser(null);
+      toast.success("Logged out");
+      router.replace("/auth");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not log out");
+    }
+  };
   const publicLinks = [{ href: "/", label: "Home" }, { href: "/#features", label: "Features" }, { href: "/#how-it-works", label: "How it works" }, { href: "/#faq", label: "FAQ" }];
   const appLinks = [{ href: "/dashboard", label: "Dashboard" }, { href: "/transactions", label: "Transactions" }];
   const links = isAuthenticated ? appLinks : publicLinks;
