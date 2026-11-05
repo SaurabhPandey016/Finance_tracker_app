@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { motion, useReducedMotion } from "framer-motion";
 import { z } from "zod";
 import { Check, Eye, EyeOff, LoaderCircle, Quote, Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +12,7 @@ import { GuestRoute } from "@/components/auth/RouteGuards";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/auth-store";
@@ -33,13 +35,14 @@ const signupSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>;
 type SignupValues = z.infer<typeof signupSchema>;
+type AuthTab = "login" | "signup";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [password.length >= 8, /[A-Za-z]/.test(password), /\d/.test(password), password.length >= 12];
   const score = checks.filter(Boolean).length;
   return (
     <div className="mt-2">
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-4 gap-1.5" aria-label={`Password strength: ${score} of 4`}>
         {[1, 2, 3, 4].map((level) => (
           <span key={level} className={`h-1 rounded-full ${score >= level ? score <= 1 ? "bg-terracotta" : score <= 2 ? "bg-[#d6a73d]" : "bg-primary" : "bg-muted"}`} />
         ))}
@@ -50,20 +53,42 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 function FieldError({ children }: { children?: string }) {
-  return children ? <p className="mt-1.5 text-xs text-terracotta">{children}</p> : null;
+  return children ? <p className="mt-1 text-xs text-terracotta">{children}</p> : null;
 }
 
-export default function AuthPage() {
+function AuthSkeleton() {
+  return (
+    <main className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-[.9fr_1.1fr]">
+      <aside className="gradient-olive hidden lg:block" />
+      <section className="flex items-center justify-center px-4 py-10">
+        <div className="glass w-full max-w-md rounded-2xl border border-border/60 p-6 sm:p-8">
+          <Skeleton className="h-11 w-full rounded-xl" />
+          <Skeleton className="mt-5 h-8 w-48" />
+          <Skeleton className="mt-2 h-5 w-64" />
+          <Skeleton className="mt-5 h-11 w-full" />
+          <Skeleton className="mt-4 h-11 w-full" />
+          <Skeleton className="mt-4 h-11 w-full" />
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AuthPageContent() {
   const params = useSearchParams();
   const router = useRouter();
-  const initialSignup = params.get("mode") === "register" || params.get("tab") === "signup";
-  const [activeTab, setActiveTab] = useState(initialSignup ? "signup" : "login");
+  const reduceMotion = useReducedMotion();
+  const activeTab: AuthTab = params.get("tab") === "signup" || params.get("mode") === "register" ? "signup" : "login";
   const [loading, setLoading] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [signupPassword, setSignupPassword] = useState("");
   const setUser = useAuthStore((state) => state.setUser);
   const { runDemo, loading: demoLoading } = useDemoLogin();
+
+  useEffect(() => {
+    document.title = activeTab === "signup" ? "Sign up | FinTrack" : "Log in | FinTrack";
+  }, [activeTab]);
 
   const loginForm = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -75,10 +100,10 @@ export default function AuthPage() {
   });
 
   const changeTab = (tab: string) => {
-    setActiveTab(tab);
-    const redirect = params.get("redirect");
+    const nextTab: AuthTab = tab === "signup" ? "signup" : "login";
     const query = new URLSearchParams();
-    query.set("tab", tab === "signup" ? "signup" : "login");
+    query.set("tab", nextTab);
+    const redirect = params.get("redirect");
     if (redirect) query.set("redirect", redirect);
     router.replace(`/auth?${query.toString()}`, { scroll: false });
   };
@@ -117,14 +142,15 @@ export default function AuthPage() {
 
   const useDemo = () => {
     loginForm.reset({ email: "demo@fintrack.app", password: "Demo@1234" });
-    setActiveTab("login");
-    runDemo();
+    void runDemo();
   };
+
+  const formMotion = reduceMotion ? {} : { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.18 } };
 
   return (
     <GuestRoute>
       <main className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-[.9fr_1.1fr]">
-        <aside className="relative hidden overflow-hidden gradient-olive p-12 lg:flex lg:flex-col lg:justify-between">
+        <aside className="relative hidden overflow-hidden gradient-olive px-10 py-8 lg:flex lg:flex-col lg:justify-between">
           <div className="absolute -left-20 top-20 size-72 rounded-full bg-white/10 blur-3xl" />
           <div className="absolute -bottom-24 -right-20 size-80 rounded-full border border-white/15" />
           <div className="relative flex items-center gap-3 text-white">
@@ -132,86 +158,105 @@ export default function AuthPage() {
             <span className="font-heading text-2xl font-bold">FinTrack</span>
           </div>
           <div className="relative max-w-md">
-            <h2 className="font-heading text-5xl font-bold leading-tight text-white">Money clarity starts here.</h2>
-            <ul className="mt-8 space-y-4 text-white/90">
+            <h2 className="font-heading text-4xl font-bold leading-tight text-white xl:text-5xl">Money clarity starts here.</h2>
+            <ul className="mt-6 space-y-3 text-sm text-white/90 xl:mt-8 xl:space-y-4 xl:text-base">
               {["See every income and expense in one place", "Understand habits with clear charts", "Your transactions stay private and secure"].map((item) => (
                 <li key={item} className="flex items-center gap-3">
-                  <span className="grid size-7 place-items-center rounded-full bg-white/15"><Check size={16} /></span>
+                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-white/15"><Check size={16} /></span>
                   {item}
                 </li>
               ))}
             </ul>
           </div>
-          <div className="relative max-w-md rounded-2xl border border-white/15 bg-white/10 p-5 text-white backdrop-blur-sm">
+          <div className="relative max-w-md rounded-2xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur-sm xl:p-5">
             <Quote className="size-5 text-white/70" />
-            <p className="mt-3 leading-7">“FinTrack turned my monthly numbers into a habit I can actually understand.”</p>
-            <p className="mt-3 text-sm font-semibold text-white/80">Priya S. · Product Designer</p>
+            <p className="mt-2 text-sm leading-6 xl:mt-3 xl:text-base xl:leading-7">“FinTrack turned my monthly numbers into a habit I can actually understand.”</p>
+            <p className="mt-2 text-xs font-semibold text-white/80 xl:text-sm">Priya S. · Product Designer</p>
           </div>
         </aside>
 
-        <section className="flex items-center justify-center px-4 py-12 sm:px-8">
-          <div className="glass w-full max-w-md rounded-3xl p-5 sm:p-8">
-            <Tabs value={activeTab} onValueChange={changeTab}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Log in</TabsTrigger>
-                <TabsTrigger value="signup">Sign up</TabsTrigger>
+        <section className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-10 sm:px-8">
+          <motion.div {...formMotion} className="glass w-full max-w-md rounded-2xl border border-border/60 p-6 sm:p-8">
+            <Tabs orientation="horizontal" value={activeTab} onValueChange={changeTab} className="flex w-full flex-col gap-0">
+              <TabsList className="grid h-11 w-full grid-cols-2 rounded-xl bg-primary/8 p-1">
+                <TabsTrigger value="login" className="h-9 rounded-lg text-sm font-medium text-muted-foreground data-active:bg-primary data-active:text-primary-foreground dark:text-muted-foreground dark:data-active:bg-primary dark:data-active:text-primary-foreground">
+                  Log in
+                </TabsTrigger>
+                <TabsTrigger value="signup" className="h-9 rounded-lg text-sm font-medium text-muted-foreground data-active:bg-primary data-active:text-primary-foreground dark:text-muted-foreground dark:data-active:bg-primary dark:data-active:text-primary-foreground">
+                  Sign up
+                </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="login" className="mt-6">
-                <h1 className="font-heading text-3xl font-bold">Welcome back</h1>
-                <p className="mt-2 text-sm text-muted-foreground">Sign in to continue to FinTrack.</p>
-                <form className="mt-7 space-y-5" onSubmit={loginForm.handleSubmit(onLogin)}>
-                  <div>
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input id="login-email" type="email" autoComplete="email" className="mt-2" {...loginForm.register("email")} />
-                    <FieldError>{loginForm.formState.errors.email?.message}</FieldError>
-                  </div>
-                  <div>
-                    <Label htmlFor="login-password">Password</Label>
-                    <div className="relative mt-2">
-                      <Input id="login-password" type={showLoginPassword ? "text" : "password"} autoComplete="current-password" className="pr-10" {...loginForm.register("password")} />
-                      <button type="button" aria-label={showLoginPassword ? "Hide password" : "Show password"} onClick={() => setShowLoginPassword((show) => !show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                        {showLoginPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                      </button>
+              <TabsContent value="login" className="mt-5 outline-none">
+                <motion.div {...formMotion}>
+                  <h1 className="whitespace-nowrap font-heading text-2xl font-semibold">Welcome back</h1>
+                  <p className="mt-1 text-sm text-muted-foreground">Sign in to continue to FinTrack.</p>
+                  <form className="mt-5 space-y-4" onSubmit={loginForm.handleSubmit(onLogin)}>
+                    <div>
+                      <Label htmlFor="login-email">Email</Label>
+                      <Input id="login-email" type="email" autoComplete="email" className="mt-1.5 h-11 rounded-lg" {...loginForm.register("email")} />
+                      <FieldError>{loginForm.formState.errors.email?.message}</FieldError>
                     </div>
-                    <FieldError>{loginForm.formState.errors.password?.message}</FieldError>
-                  </div>
-                  <Button type="submit" className="gradient-olive w-full text-white" disabled={loading || demoLoading}>
-                    {loading ? <><LoaderCircle className="mr-2 size-4 animate-spin" />Logging in...</> : "Log in"}
+                    <div>
+                      <Label htmlFor="login-password">Password</Label>
+                      <div className="relative mt-1.5">
+                        <Input id="login-password" type={showLoginPassword ? "text" : "password"} autoComplete="current-password" className="h-11 rounded-lg pr-11" {...loginForm.register("password")} />
+                        <button type="button" aria-label={showLoginPassword ? "Hide password" : "Show password"} onClick={() => setShowLoginPassword((show) => !show)} className="absolute right-0 top-0 grid size-11 place-items-center text-muted-foreground">
+                          {showLoginPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                      </div>
+                      <FieldError>{loginForm.formState.errors.password?.message}</FieldError>
+                    </div>
+                    <Button type="submit" className="gradient-olive h-11 w-full text-white" disabled={loading || demoLoading}>
+                      {loading ? <><LoaderCircle className="mr-2 size-4 animate-spin" />Logging in...</> : "Log in"}
+                    </Button>
+                  </form>
+                  <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" /><span>or</span><span className="h-px flex-1 bg-border" /></div>
+                  <Button type="button" variant="outline" className="mt-4 h-11 w-full" onClick={useDemo} disabled={loading || demoLoading}>
+                    {demoLoading ? <><LoaderCircle className="mr-2 size-4 animate-spin" />Opening demo...</> : "Use demo account"}
                   </Button>
-                </form>
-                <Button type="button" variant="outline" className="mt-3 w-full" onClick={useDemo} disabled={loading || demoLoading}>
-                  {demoLoading ? "Opening demo..." : "Use demo account"}
-                </Button>
+                  <p className="mt-4 text-center text-sm text-muted-foreground">Don&apos;t have an account?{" "}<button type="button" className="font-medium text-primary hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" onClick={() => changeTab("signup")}>Sign up</button></p>
+                </motion.div>
               </TabsContent>
 
-              <TabsContent value="signup" className="mt-6">
-                <h1 className="font-heading text-3xl font-bold">Create your account</h1>
-                <p className="mt-2 text-sm text-muted-foreground">Start building healthier money habits.</p>
-                <form className="mt-7 space-y-4" onSubmit={signupForm.handleSubmit(onSignup)}>
-                  <div><Label htmlFor="signup-name">Name</Label><Input id="signup-name" autoComplete="name" className="mt-2" {...signupForm.register("name")} /><FieldError>{signupForm.formState.errors.name?.message}</FieldError></div>
-                  <div><Label htmlFor="signup-email">Email</Label><Input id="signup-email" type="email" autoComplete="email" className="mt-2" {...signupForm.register("email")} /><FieldError>{signupForm.formState.errors.email?.message}</FieldError></div>
-                  <div>
-                    <Label htmlFor="signup-password">Password</Label>
-                    <div className="relative mt-2">
-                      <Input id="signup-password" type={showSignupPassword ? "text" : "password"} autoComplete="new-password" className="pr-10" {...signupForm.register("password", { onChange: (event) => setSignupPassword(event.target.value) })} />
-                      <button type="button" aria-label={showSignupPassword ? "Hide password" : "Show password"} onClick={() => setShowSignupPassword((show) => !show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                        {showSignupPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                      </button>
+              <TabsContent value="signup" className="mt-4 outline-none">
+                <motion.div {...formMotion}>
+                  <h1 className="whitespace-nowrap font-heading text-2xl font-semibold">Create your account</h1>
+                  <p className="mt-1 text-sm text-muted-foreground">Start tracking your money in minutes.</p>
+                  <form className="mt-4 space-y-3" onSubmit={signupForm.handleSubmit(onSignup)}>
+                    <div><Label htmlFor="signup-name">Name</Label><Input id="signup-name" autoComplete="name" className="mt-1.5 h-11 rounded-lg" {...signupForm.register("name")} /><FieldError>{signupForm.formState.errors.name?.message}</FieldError></div>
+                    <div><Label htmlFor="signup-email">Email</Label><Input id="signup-email" type="email" autoComplete="email" className="mt-1.5 h-11 rounded-lg" {...signupForm.register("email")} /><FieldError>{signupForm.formState.errors.email?.message}</FieldError></div>
+                    <div>
+                      <Label htmlFor="signup-password">Password</Label>
+                      <div className="relative mt-1.5">
+                        <Input id="signup-password" type={showSignupPassword ? "text" : "password"} autoComplete="new-password" className="h-11 rounded-lg pr-11" {...signupForm.register("password", { onChange: (event) => setSignupPassword(event.target.value) })} />
+                        <button type="button" aria-label={showSignupPassword ? "Hide password" : "Show password"} onClick={() => setShowSignupPassword((show) => !show)} className="absolute right-0 top-0 grid size-11 place-items-center text-muted-foreground">
+                          {showSignupPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                      </div>
+                      <PasswordStrength password={signupPassword} />
+                      <FieldError>{signupForm.formState.errors.password?.message}</FieldError>
                     </div>
-                    <PasswordStrength password={signupPassword} />
-                    <FieldError>{signupForm.formState.errors.password?.message}</FieldError>
-                  </div>
-                  <div><Label htmlFor="confirm-password">Confirm password</Label><Input id="confirm-password" type={showSignupPassword ? "text" : "password"} autoComplete="new-password" className="mt-2" {...signupForm.register("confirmPassword")} /><FieldError>{signupForm.formState.errors.confirmPassword?.message}</FieldError></div>
-                  <Button type="submit" className="gradient-olive w-full text-white" disabled={loading}>
-                    {loading ? <><LoaderCircle className="mr-2 size-4 animate-spin" />Creating account...</> : "Create account"}
-                  </Button>
-                </form>
+                    <div><Label htmlFor="confirm-password">Confirm password</Label><Input id="confirm-password" type={showSignupPassword ? "text" : "password"} autoComplete="new-password" className="mt-1.5 h-11 rounded-lg" {...signupForm.register("confirmPassword")} /><FieldError>{signupForm.formState.errors.confirmPassword?.message}</FieldError></div>
+                    <Button type="submit" className="gradient-olive h-11 w-full text-white" disabled={loading || demoLoading}>
+                      {loading ? <><LoaderCircle className="mr-2 size-4 animate-spin" />Creating account...</> : "Create account"}
+                    </Button>
+                  </form>
+                  <p className="mt-4 text-center text-sm text-muted-foreground">Already have an account?{" "}<button type="button" className="font-medium text-primary hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" onClick={() => changeTab("login")}>Log in</button></p>
+                </motion.div>
               </TabsContent>
             </Tabs>
-          </div>
+          </motion.div>
         </section>
       </main>
     </GuestRoute>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<AuthSkeleton />}>
+      <AuthPageContent />
+    </Suspense>
   );
 }
