@@ -9,7 +9,7 @@ export const authRouter = Router();
 
 authRouter.post("/register", authLimiter, validate(registerSchema), register);
 authRouter.post("/login", authLimiter, validate(loginSchema), login);
-authRouter.post("/logout", logout);
+authRouter.post("/logout", authenticate, logout);
 authRouter.get("/me", authenticate, getMe);
 authRouter.patch("/me", authenticate, validate(updateProfileSchema), updateProfile);
 authRouter.patch("/password", authenticate, validate(changePasswordSchema), changePassword);

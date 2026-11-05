@@ -35,7 +35,7 @@ export const authService = {
     if (existing) throw new AppError(409, "Email already registered");
     const passwordHash = await bcrypt.hash(input.password, 12);
     const user = await prisma.user.create({ data: { name: input.name.trim(), email, passwordHash } });
-    return toPublicUser(user);
+    return { user: toPublicUser(user), tokenVersion: user.tokenVersion };
   },
 
   async login(input: { email: string; password: string }) {
@@ -44,7 +44,7 @@ export const authService = {
     const hash = user?.passwordHash ?? dummyPasswordHash;
     const passwordMatches = await bcrypt.compare(input.password, hash);
     if (!user || !passwordMatches) throw new AppError(401, "Invalid email or password");
-    return toPublicUser(user);
+    return { user: toPublicUser(user), tokenVersion: user.tokenVersion };
   },
 
   async getMe(userId: string) {
@@ -64,6 +64,10 @@ export const authService = {
     const matches = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!matches) throw new AppError(401, "Current password is incorrect");
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash, tokenVersion: { increment: 1 } } });
+  },
+
+  async revokeSessions(userId: string) {
+    await prisma.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
   },
 };

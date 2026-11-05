@@ -6,6 +6,7 @@ if (process.env.NODE_ENV === "production" && !process.env.API_ORIGIN) {
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  partialPrefetching: true,
   async rewrites() {
     const origin = process.env.API_ORIGIN?.replace(/\/+$/, "");
     if (!origin) return [];

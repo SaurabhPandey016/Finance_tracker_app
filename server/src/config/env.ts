@@ -7,7 +7,7 @@ const envSchema = z.object({
   CLIENT_URL: z.string().url().transform((value) => value.replace(/\/+$/, "")).default("http://localhost:3000"),
   DATABASE_URL: z.string().url().or(z.string().startsWith("postgresql://")).default("postgresql://postgres:postgres@localhost:5432/fintrack?schema=public"),
   DIRECT_URL: z.string().url().or(z.string().startsWith("postgresql://")).default("postgresql://postgres:postgres@localhost:5432/fintrack?schema=public"),
-  JWT_SECRET: z.string().min(32).default("development-only-secret-change-me-32-characters"),
+  JWT_SECRET: z.string().min(32).optional(),
   JWT_EXPIRES_IN: z.string().min(1).default("7d"),
 });
 
@@ -17,4 +17,8 @@ if (!parsed.success) {
   throw new Error(`Invalid environment configuration:\n${details}`);
 }
 
-export const env = parsed.data;
+if (!parsed.data.JWT_SECRET) {
+  throw new Error("Invalid environment configuration:\nJWT_SECRET: Required (minimum 32 characters)");
+}
+
+export const env = { ...parsed.data, JWT_SECRET: parsed.data.JWT_SECRET };

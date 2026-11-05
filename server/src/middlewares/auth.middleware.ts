@@ -11,6 +11,7 @@ export const authenticate: RequestHandler = async (req, res, next) => {
     const payload = verifyAuthToken(token);
     const user = await prisma.user.findUnique({ where: { id: payload.userId } });
     if (!user) throw new AppError(401, "Unauthorized");
+    if (user.tokenVersion !== payload.tokenVersion) throw new AppError(401, "Unauthorized");
     req.user = user;
     next();
   } catch (error) {

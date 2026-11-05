@@ -44,5 +44,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  return <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jakarta.variable}`}><body className="min-h-screen"><ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}><AuthProvider><BackendStatusProvider><Navbar/><div className="min-h-screen pt-16">{children}</div><Footer/><Toaster richColors/></BackendStatusProvider></AuthProvider></ThemeProvider></body></html>;
+  return <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth" className={`${inter.variable} ${jakarta.variable}`}><body className="min-h-screen"><ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}><AuthProvider><BackendStatusProvider><Navbar/><div className="min-h-screen pt-16">{children}</div><Footer/><Toaster richColors/></BackendStatusProvider></AuthProvider></ThemeProvider></body></html>;
 }
