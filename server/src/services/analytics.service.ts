@@ -1,6 +1,6 @@
 import { Prisma, TransactionType } from "@prisma/client";
 import { prisma } from "../config/prisma.js";
-import { buildTransactionWhere, type TransactionFilters } from "./transaction.service.js";
+import { buildTransactionWhere, endDateOnlyUtc, parseDateOnlyUtc, type TransactionFilters } from "./transaction.service.js";
 
 const minorToMajor = (minor: number): number => minor / 100;
 
@@ -47,10 +47,12 @@ export const analyticsService = {
     });
   },
 
-  async monthly(userId: string, months: number) {
+  async monthly(userId: string, months: number, filters: Omit<TransactionFilters, "userId"> = {}) {
     const now = new Date();
     const firstMonth = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
     const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const start = filters.from ? parseDateOnlyUtc(filters.from) : firstMonth;
+    const end = filters.to ? endDateOnlyUtc(filters.to) : endOfCurrentMonth;
 
     const rows = await prisma.$queryRaw<MonthlyRow[]>(Prisma.sql`
       SELECT date_trunc('month', date) AS month,
@@ -58,8 +60,10 @@ export const analyticsService = {
         COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN "amountMinor" ELSE 0 END), 0)::bigint AS expense
       FROM "Transaction"
       WHERE "userId" = ${userId}
-        AND date >= ${firstMonth}
-        AND date < ${endOfCurrentMonth}
+        AND date >= ${start}
+        AND date <= ${end}
+        ${filters.type ? Prisma.sql`AND type = ${filters.type}::"TransactionType"` : Prisma.empty}
+        ${filters.categoryId ? Prisma.sql`AND "categoryId" = ${filters.categoryId}` : Prisma.empty}
       GROUP BY date_trunc('month', date)
       ORDER BY month ASC
     `);

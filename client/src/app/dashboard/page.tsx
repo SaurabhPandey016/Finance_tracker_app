@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowDownRight, ArrowUpRight, Plus, Scale, WalletCards } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -20,6 +19,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCategoryBreakdown, useMonthlyTrends, useSummary, useTransactions } from "@/hooks/useDashboardData";
 import { formatCurrency } from "@/lib/format";
 import type { Transaction } from "@/types/dashboard";
+import { formatDateOnly } from "@/lib/date-only";
+import { useDataRefresh } from "@/store/data-refresh";
 
 export default function DashboardPage() {
   return <ProtectedRoute><Dashboard /></ProtectedRoute>;
@@ -54,6 +55,14 @@ function Dashboard() {
   const searchParams = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [months, setMonths] = useState(6);
+  const invalidate = useDataRefresh((state) => state.invalidate);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") invalidate();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [invalidate]);
 
   const filters = useMemo<TransactionFilterState>(() => {
     const preset = searchParams.get("range") ?? "this-month";
@@ -77,7 +86,7 @@ function Dashboard() {
 
   const summary = useSummary(apiFilters);
   const categories = useCategoryBreakdown(apiFilters);
-  const monthly = useMonthlyTrends(months);
+  const monthly = useMonthlyTrends(months, apiFilters);
   const transactions = useTransactions(apiFilters, 5);
 
   const updateFilters = (next: TransactionFilterState) => {
@@ -120,7 +129,7 @@ function Dashboard() {
         <TransactionFilters value={filters} onChange={updateFilters} />
       </div>
 
-      {summary.loading ? (
+      {summary.loading && !summary.data ? (
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           {[0, 1, 2].map((item) => <Skeleton key={item} className="h-36 rounded-2xl" />)}
         </div>
@@ -129,7 +138,7 @@ function Dashboard() {
       ) : summary.error ? (
         <DataError onRetry={summary.refetch} />
       ) : summary.data && (
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={`mt-5 grid gap-4 transition-opacity sm:grid-cols-2 lg:grid-cols-3 ${summary.loading ? "opacity-70" : ""}`}>
           <SummaryCard title="Total income" value={summary.data.totalIncome} currency={user?.currency} icon={<ArrowUpRight />} iconClass="bg-income/15 text-income" />
           <SummaryCard title="Total expenses" value={summary.data.totalExpense} currency={user?.currency} icon={<ArrowDownRight />} iconClass="bg-terracotta/15 text-terracotta" />
           <SummaryCard title="Balance" value={summary.data.balance} currency={user?.currency} icon={<Scale />} iconClass="bg-amber-gold/15 text-amber-gold" badge={`${summary.data.savingsRate.toFixed(1)}% savings`} />
@@ -140,7 +149,7 @@ function Dashboard() {
         <Card className="glass overflow-hidden">
           <CardHeader><CardTitle>Spending by category</CardTitle></CardHeader>
           <CardContent className="min-h-80">
-            {categories.loading ? <Skeleton className="h-72 w-full" /> :
+            {categories.loading && !categories.data ? <Skeleton className="h-72 w-full" /> :
               categories.availabilityError ? <BackendUnavailableCard /> :
               categories.error ? <DataError onRetry={categories.refetch} /> :
               !categories.data || categories.data.length === 0 ? (
@@ -162,7 +171,7 @@ function Dashboard() {
             </Select>
           </CardHeader>
           <CardContent className="min-h-80">
-            {monthly.loading ? <Skeleton className="h-72 w-full" /> :
+            {monthly.loading && !monthly.data ? <Skeleton className="h-72 w-full" /> :
               monthly.availabilityError ? <BackendUnavailableCard /> :
               monthly.error ? <DataError onRetry={monthly.refetch} /> :
               <MonthlyChart data={monthly.data ?? []} currency={user?.currency ?? "INR"} />}
@@ -176,7 +185,7 @@ function Dashboard() {
           <Button variant="ghost" size="sm" onClick={() => router.push("/transactions")}>View all</Button>
         </CardHeader>
         <CardContent>
-          {transactions.loading ? (
+          {transactions.loading && !transactions.data ? (
             <div className="space-y-3">{[0, 1, 2].map((item) => <Skeleton key={item} className="h-16" />)}</div>
           ) : transactions.availabilityError ? <BackendUnavailableCard /> :
             transactions.error ? <DataError onRetry={transactions.refetch} /> :
@@ -215,6 +224,15 @@ function SummaryCard({ title, value, currency, icon, iconClass, badge }: {
 
 function CategoryChart({ data, currency }: { data: Array<{ name: string; color: string; total: number; percentage: number }>; currency: "INR" | "USD" }) {
   const total = data.reduce((sum, item) => sum + item.total, 0);
+  const percentages = (() => {
+    const exact = data.map((item) => item.percentage);
+    const floors = exact.map(Math.floor);
+    const remaining = 100 - floors.reduce((sum, value) => sum + value, 0);
+    const order = exact.map((value, index) => ({ index, fraction: value - floors[index] })).sort((a, b) => b.fraction - a.fraction);
+    const result = [...floors];
+    for (let index = 0; index < remaining && index < order.length; index++) result[order[index].index] += 1;
+    return result;
+  })();
   return (
     <div className="grid min-h-72 items-center gap-2 sm:grid-cols-[1fr_180px]">
       <div className="relative h-56">
@@ -234,18 +252,28 @@ function CategoryChart({ data, currency }: { data: Array<{ name: string; color: 
         </div>
       </div>
       <div className="space-y-2">
-        {data.map((item) => (
+        {data.map((item, index) => (
           <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
             <span className="flex min-w-0 items-center gap-2">
               <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
               <span className="truncate text-muted-foreground">{item.name}</span>
             </span>
-            <span className="font-semibold">{item.percentage.toFixed(0)}%</span>
+            <span className="font-semibold">{percentages[index]}%</span>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+function compactCurrency(value: number, currency: "INR" | "USD") {
+  const symbol = currency === "INR" ? "₹" : "$";
+  if (currency === "INR") {
+    if (value >= 10_000_000) return `${symbol}${(value / 10_000_000).toFixed(value % 10_000_000 === 0 ? 0 : 1)}Cr`;
+    if (value >= 100_000) return `${symbol}${(value / 100_000).toFixed(value % 100_000 === 0 ? 0 : 1)}L`;
+  }
+  if (value >= 1_000) return `${symbol}${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}K`;
+  return `${symbol}${Math.round(value)}`;
 }
 
 function MonthlyChart({ data, currency }: { data: Array<{ label: string; income: number; expense: number }>; currency: "INR" | "USD" }) {
@@ -255,7 +283,7 @@ function MonthlyChart({ data, currency }: { data: Array<{ label: string; income:
         <BarChart data={data} margin={{ top: 8, right: 4, left: -16, bottom: 0 }} barGap={4}>
           <CartesianGrid vertical={false} strokeOpacity={0.2} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
-          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(value) => formatCurrency(Number(value), currency)} />
+          <YAxis width={currency === "INR" ? 64 : 58} tickMargin={4} tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(value) => compactCurrency(Number(value), currency)} />
           <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0), currency)} />
           <Bar dataKey="income" name="Income" fill="#8da242" radius={[8, 8, 0, 0]} />
           <Bar dataKey="expense" name="Expenses" fill="#c8553d" radius={[8, 8, 0, 0]} />
@@ -274,7 +302,7 @@ function RecentTransaction({ transaction, currency }: { transaction: Transaction
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold">{transaction.note || transaction.category.name}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">{transaction.category.name} · {formatDistanceToNow(new Date(transaction.date), { addSuffix: true })}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{transaction.category.name} · {formatDateOnly(transaction.date)}</p>
       </div>
       <p className={`shrink-0 font-bold ${income ? "text-income" : "text-terracotta"}`}>
         {income ? "+" : "-"}{formatCurrency(transaction.amount, currency)}

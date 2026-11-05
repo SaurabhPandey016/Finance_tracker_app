@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { todayDateOnly } from "@/lib/date-only";
+import { useDataRefresh } from "@/store/data-refresh";
 
 const transactionSchema = z.object({
   type: z.enum(["INCOME", "EXPENSE"]),
@@ -24,7 +26,7 @@ const transactionSchema = z.object({
     "Use no more than 2 decimal places",
   ),
   note: z.string().trim().max(200, "Maximum 200 characters").optional(),
-  date: z.string().min(1, "Choose a date"),
+  date: z.string().min(1, "Choose a date").refine((value) => value <= todayDateOnly(), "Date cannot be in the future"),
 });
 
 type TransactionFormValues = z.infer<typeof transactionSchema>;
@@ -38,6 +40,7 @@ export function TransactionFormDialog({ open, onOpenChange, transaction, onSaved
   const [categories, setCategories] = useState<Category[]>([]);
   const [type, setType] = useState<TransactionType>(transaction?.type ?? "EXPENSE");
   const [categoryId, setCategoryId] = useState(transaction?.category.id ?? "");
+  const invalidate = useDataRefresh((state) => state.invalidate);
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
@@ -45,7 +48,7 @@ export function TransactionFormDialog({ open, onOpenChange, transaction, onSaved
       categoryId: transaction?.category.id ?? "",
       amount: transaction?.amount ?? 0,
       note: transaction?.note ?? "",
-      date: transaction ? transaction.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      date: transaction ? transaction.date.slice(0, 10) : todayDateOnly(),
     },
   });
 
@@ -63,7 +66,7 @@ export function TransactionFormDialog({ open, onOpenChange, transaction, onSaved
         categoryId: values.categoryId,
         amount: values.amount,
         note: values.note || undefined,
-        date: new Date(`${values.date}T12:00:00.000Z`).toISOString(),
+        date: values.date,
       };
       if (transaction) {
         await api.patch(`/transactions/${transaction.id}`, payload);
@@ -73,6 +76,7 @@ export function TransactionFormDialog({ open, onOpenChange, transaction, onSaved
         toast.success("Transaction added");
       }
       onOpenChange(false);
+      invalidate();
       onSaved();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to save transaction";
@@ -112,7 +116,7 @@ export function TransactionFormDialog({ open, onOpenChange, transaction, onSaved
               <Label htmlFor="date">Date</Label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="date" type="date" className="pl-9" {...form.register("date")} />
+                <Input id="date" type="date" max={todayDateOnly()} className="pl-9" {...form.register("date")} />
               </div>
               {form.formState.errors.date && <p className="text-xs text-destructive">{form.formState.errors.date.message}</p>}
             </div>

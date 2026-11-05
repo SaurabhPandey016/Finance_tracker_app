@@ -11,6 +11,9 @@ export interface TransactionFilters {
   search?: string;
 }
 
+export const parseDateOnlyUtc = (value: string): Date => new Date(`${value}T00:00:00.000Z`);
+export const endDateOnlyUtc = (value: string): Date => new Date(`${value}T23:59:59.999Z`);
+
 export const buildTransactionWhere = (filters: TransactionFilters): Prisma.TransactionWhereInput => {
   const where: Prisma.TransactionWhereInput = { userId: filters.userId };
   if (filters.type) where.type = filters.type;
@@ -18,12 +21,8 @@ export const buildTransactionWhere = (filters: TransactionFilters): Prisma.Trans
   if (filters.search) where.note = { contains: filters.search, mode: "insensitive" };
   if (filters.from || filters.to) {
     where.date = {};
-    if (filters.from) where.date.gte = new Date(filters.from);
-    if (filters.to) {
-      const end = new Date(filters.to);
-      end.setUTCHours(23, 59, 59, 999);
-      where.date.lte = end;
-    }
+    if (filters.from) where.date.gte = parseDateOnlyUtc(filters.from);
+    if (filters.to) where.date.lte = endDateOnlyUtc(filters.to);
   }
   return where;
 };
@@ -59,7 +58,7 @@ export const transactionService = {
   async create(userId: string, input: { type: TransactionType; categoryId: string; amount: number; note?: string; date: string }) {
     await validateCategory(input.categoryId, input.type);
     const transaction = await prisma.transaction.create({
-      data: { userId, type: input.type, categoryId: input.categoryId, amountMinor: Math.round(input.amount * 100), note: input.note, date: new Date(input.date) },
+      data: { userId, type: input.type, categoryId: input.categoryId, amountMinor: Math.round(input.amount * 100), note: input.note, date: parseDateOnlyUtc(input.date) },
       include: { category: { select: categorySelection } },
     });
     return toTransactionResponse(transaction);
@@ -101,7 +100,7 @@ export const transactionService = {
         ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
         ...(input.amount !== undefined ? { amountMinor: Math.round(input.amount * 100) } : {}),
         ...(input.note !== undefined ? { note: input.note } : {}),
-        ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
+        ...(input.date !== undefined ? { date: parseDateOnlyUtc(input.date) } : {}),
       },
       include: { category: { select: categorySelection } },
     });

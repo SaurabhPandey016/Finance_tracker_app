@@ -14,6 +14,7 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "smoke": "tsx scripts/smoke.ts",
+    "accuracy": "tsx scripts/accuracy.ts",
     "lint": "eslint \"src/**/*.ts\" \"scripts/**/*.ts\" \"prisma/**/*.ts\""
   },
   "dependencies": {

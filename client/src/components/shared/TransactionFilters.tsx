@@ -9,6 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { format } from "date-fns";
 
 export interface TransactionFilterState {
   preset: string;
@@ -20,18 +21,15 @@ export interface TransactionFilterState {
 
 export function presetRange(preset: string): Pick<TransactionFilterState, "from" | "to"> {
   const now = new Date();
-  if (preset === "this-month") return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), to: endOfDay(now).toISOString() };
+  const dateOnly = (date: Date) => format(date, "yyyy-MM-dd");
+  if (preset === "this-month") return { from: dateOnly(new Date(now.getFullYear(), now.getMonth(), 1)), to: dateOnly(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
   if (preset === "last-month") {
     const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return { from: start.toISOString(), to: endOfDay(new Date(now.getFullYear(), now.getMonth(), 0)).toISOString() };
+    return { from: dateOnly(start), to: dateOnly(new Date(now.getFullYear(), now.getMonth(), 0)) };
   }
-  if (preset === "last-3-months") return { from: new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString(), to: endOfDay(now).toISOString() };
-  if (preset === "this-year") return { from: new Date(now.getFullYear(), 0, 1).toISOString(), to: endOfDay(now).toISOString() };
+  if (preset === "last-3-months") return { from: dateOnly(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to: dateOnly(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
+  if (preset === "this-year") return { from: dateOnly(new Date(now.getFullYear(), 0, 1)), to: dateOnly(new Date(now.getFullYear(), 11, 31)) };
   return {};
-}
-
-function endOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 }
 
 export function TransactionFilters({ value, onChange }: {
@@ -87,7 +85,7 @@ export function TransactionFilters({ value, onChange }: {
                 </div>
                 <Button size="sm" className="mt-2 w-full" disabled={!customFrom || !customTo} onClick={() => {
                   if (customFrom && customTo) {
-                    onChange({ ...value, from: customFrom.toISOString(), to: endOfDay(customTo).toISOString() });
+                    onChange({ ...value, from: format(customFrom, "yyyy-MM-dd"), to: format(customTo, "yyyy-MM-dd") });
                   }
                 }}>Apply range</Button>
               </PopoverContent>

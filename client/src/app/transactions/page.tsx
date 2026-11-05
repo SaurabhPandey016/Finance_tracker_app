@@ -3,7 +3,6 @@
 import {
   Download, Pencil, Plus, Search, Trash2, WalletCards,
 } from "lucide-react";
-import { isSameDay, format, formatDistanceToNow } from "date-fns";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -28,6 +27,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { isBackendUnavailable } from "@/lib/backend-status";
 import { formatCurrency } from "@/lib/format";
+import { formatDateOnly, todayDateOnly } from "@/lib/date-only";
+import { useDataRefresh } from "@/store/data-refresh";
 import type { Transaction } from "@/types/dashboard";
 
 interface TransactionPageData {
@@ -59,6 +60,8 @@ function Transactions() {
   const [editing, setEditing] = useState<Transaction | undefined>();
   const [deleting, setDeleting] = useState<Transaction | undefined>();
   const requestVersion = useRef(0);
+  const refreshVersion = useDataRefresh((state) => state.version);
+  const invalidate = useDataRefresh((state) => state.invalidate);
 
   const filters = useMemo<TransactionFilterState>(() => {
     const preset = searchParams.get("range") ?? "all";
@@ -110,6 +113,14 @@ function Transactions() {
   };
 
   useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") invalidate();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [invalidate]);
+
+  useEffect(() => {
     let active = true;
     const params = new URLSearchParams({
       page: String(page),
@@ -137,7 +148,7 @@ function Transactions() {
         setLoading(false);
       });
     return () => { active = false; };
-  }, [page, limit, sortBy, order, search, filters.from, filters.to, filters.categoryId, filters.type]);
+  }, [page, limit, sortBy, order, search, filters.from, filters.to, filters.categoryId, filters.type, refreshVersion]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -235,6 +246,7 @@ function Transactions() {
       pagination: { ...current.pagination, total: Math.max(0, current.pagination.total - 1) },
     } : current);
     setDeleting(undefined);
+    invalidate();
     try {
       await api.delete(`/transactions/${removed.id}`);
       toast.success(`${removed.note || removed.category.name} deleted`);
@@ -247,6 +259,7 @@ function Transactions() {
         return { ...current, items, pagination: { ...current.pagination, total: current.pagination.total + 1 } };
       });
       toast.error(requestError instanceof Error ? requestError.message : "Unable to delete transaction");
+      invalidate();
     }
   };
 
@@ -333,7 +346,7 @@ function Transactions() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         transaction={editing}
-        onSaved={() => void fetchTransactions()}
+        onSaved={() => { invalidate(); void fetchTransactions(); }}
       />
 
       <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => { if (!open) setDeleting(undefined); }}>
@@ -353,12 +366,14 @@ function Transactions() {
 }
 
 function dateHeading(dateValue: string) {
-  const date = new Date(dateValue);
-  const now = new Date();
-  if (isSameDay(date, now)) return "Today";
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  if (isSameDay(date, yesterday)) return "Yesterday";
-  return format(date, "d MMM yyyy");
+  const value = dateValue.slice(0, 10);
+  const today = todayDateOnly();
+  if (value === today) return "Today";
+  const [year, month, day] = today.split("-").map(Number);
+  const yesterday = new Date(year, month - 1, day - 1);
+  const yesterdayOnly = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+  if (value === yesterdayOnly) return "Yesterday";
+  return formatDateOnly(value);
 }
 
 function groupTransactions(items: Transaction[]) {
@@ -397,7 +412,7 @@ function TransactionTable({ items, currency, onEdit, onDelete }: {
               </TableRow>
               {groupedItems.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell className="text-muted-foreground">{format(new Date(item.date), "dd MMM yyyy")}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDateOnly(item.date)}</TableCell>
                   <TableCell>
                     <span className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1">
                       <span className="size-2 rounded-full" style={{ backgroundColor: item.category.color }} />
@@ -452,7 +467,7 @@ function TransactionCards({ items, currency, onEdit, onDelete }: {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{item.note || item.category.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{item.category.name} · {formatDistanceToNow(new Date(item.date), { addSuffix: true })}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{item.category.name} · {formatDateOnly(item.date)}</p>
                       </div>
                       <p className={`shrink-0 font-bold ${item.type === "INCOME" ? "text-income" : "text-terracotta"}`}>
                         {item.type === "INCOME" ? "+" : "-"}{formatCurrency(item.amount, currency)}

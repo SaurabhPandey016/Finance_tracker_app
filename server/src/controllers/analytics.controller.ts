@@ -25,7 +25,7 @@ export const analyticsByCategory: RequestHandler = asyncHandler(async (req, res)
 
 export const analyticsMonthly: RequestHandler = asyncHandler(async (req, res) => {
   const userId = requireUser(req);
-  const months = Number((req.query as unknown as { months?: number }).months ?? 6);
-  const data = await analyticsService.monthly(userId, months);
+  const query = req.query as unknown as { months?: number; from?: string; to?: string; type?: TransactionType; categoryId?: string };
+  const data = await analyticsService.monthly(userId, Number(query.months ?? 6), query);
   res.status(200).json({ success: true, message: "Monthly analytics retrieved", data });
 });
